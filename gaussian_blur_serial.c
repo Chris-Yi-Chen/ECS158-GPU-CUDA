@@ -9,33 +9,58 @@
 
 //gcc -g -Wall -Wextra -Werror -O2 .\gaussian_blur_serial.c -o gaussian_blur_serial -lm
 
+int calc_coord(int ind, int k_ind, int order, int length) {
+    if (ind + k_ind - (order / 2) < 0) {
+        return 0;
+    } else if (ind + k_ind + (order / 2) > length) {
+        return length - 1;
+    }
+    
+    return ind + k_ind - (order / 2);
+}
 
 void gaussian_blur(int *img, int *outImg, float* kernel, int width, int height, int order) {
 
     for (int i = 0; i < width; i++) {
         for (int j = 0; j < height; j++) {
-            int sum = 0;
+            float sum = 0;
+            int i_ind, j_ind;
 
             // iterate through kernel matrix and multiple weights
             for (int ki = 0; ki < order; ki++) {
+                i_ind = calc_coord(i, ki, order, width);
                 for (int kj = 0; kj < order; kj++) {
-                    if (j + kj - (order / 2) < 0 ) {
+                    j_ind = calc_coord(j, kj, order, height);
+                    sum += img[j_ind * width + i_ind] * kernel[kj * order + ki];
+                    // // Set each coordinate if is out of bounds
+                    // if (i + ki - (order / 2) < 0) {
+                    //     i_ind = 0;
+                    // } else if (i + ki + (order / 2) > width) {
+                    //     i_ind = width - 1;
+                    // } else {
+                    //     i_ind = i + ki - (order / 2);
+                    // }
 
-                    }
-                    if (i + ki - (order / 2) < 0 ) {
-
-                    }
-                    sum += img[(j + kj - (order / 2)) * height + (i + ki - (order / 2))] * kernel[kj * order + ki];
+                    // if (j + kj - (order / 2) < 0) {
+                    //     j_ind = 0;
+                    // } else if (j + kj + (order / 2) > height) {
+                    //     j_ind = height - 1;
+                    // } else {
+                    //     j_ind = j + kj - (order / 2);
+                    // }
+                    // sum += img[(j + kj - (order / 2)) * height + (i + ki - (order / 2))] * kernel[kj * order + ki];
                 }
             }
-
-            outImg[j * height + i] = sum;
+            //printf("%.8f ", sum);
+            outImg[j * width + i] = (int)sum;
         }
+
+        //printf("\n");
     }
 
 }
 
-float gausian_func(int x, int y, float sigma) {
+float gaussian_func(int x, int y, float sigma) {
     /* FIX ME */
     // might need to normalize it so the sum = 1.0
     float exponent = -(x*x + y*y) / (2.0 * sigma * sigma);
@@ -50,10 +75,10 @@ void create_kernel_matrix(float **kernel, int order, float sigma) {
 
     for (i = (int)(-order / 2); i <= (order / 2); i++) {
         for (j = (int)(-order / 2); j <= (order / 2); j++) {
-            (*kernel)[j * order + i] = gausian_func(i, j, sigma);
-            // printf("%.8f ", (*kernel)[j * order + i]);
+            (*kernel)[(j + (order/2)) * order + (i + (order/2))] = gaussian_func(i, j, sigma);
+            printf("%.8f ", (*kernel)[j * order + i]);
         }
-        // printf("\n");
+        printf("\n");
     }    
 }
 
@@ -161,11 +186,11 @@ int main(int argc, char *argv[])
 
 
     /* Call implementation */
-    int *outImg = (int *)alligned_alloc(64, width * height * sizeof(int));
+    int *outImg = aligned_alloc(64, width * height * sizeof(int));
     gaussian_blur(img, outImg, kernel, width, height, order); 
 
     /* Save output image */
-    write_pgm(outFilename, img, height, max_gray);
+    write_pgm(outFilename, outImg, height, max_gray);
 
     /* Free resources */
     free(img);
