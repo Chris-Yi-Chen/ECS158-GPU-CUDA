@@ -7,12 +7,15 @@
 #define MAX_LINE_LENGTH 1024
 #define M_PI 3.14159265358979323846
 
-//gcc -g -Wall -Wextra -Werror -O2 .\gaussian_blur_serial.c -o gaussian_blur_serial -lm
+//gcc -g -Wall -Wextra -Werror -O2 ./gaussian_blur_serial.c -o gaussian_blur_serial -lm
+//./gaussian_blur_serial city_256.pgm city_256_1.pgm 1
+//./ref_gaussian_blur_serial city_256.pgm city_256_ref.pgm 1
+//compare -fuzz 1% -metric AE ./city_256_1.pgm city_256_ref.pgm null:
 
 int calc_coord(int ind, int k_ind, int order, int length) {
     if (ind + k_ind - (order / 2) < 0) {
         return 0;
-    } else if (ind + k_ind + (order / 2) > length) {
+    } else if (ind + k_ind - (order / 2) >= length) {
         return length - 1;
     }
     
@@ -21,43 +24,26 @@ int calc_coord(int ind, int k_ind, int order, int length) {
 
 void gaussian_blur(int *img, int *outImg, float* kernel, int width, int height, int order) {
 
+    // x-axis
     for (int i = 0; i < width; i++) {
+        // y-axis
         for (int j = 0; j < height; j++) {
             float sum = 0;
             int i_ind, j_ind;
 
-            // iterate through kernel matrix and multiple weights
+            // iterate through kernel matrix and multiply weights
+            // x-axis of kernel
             for (int ki = 0; ki < order; ki++) {
                 i_ind = calc_coord(i, ki, order, width);
+                // y-axis of kernel
                 for (int kj = 0; kj < order; kj++) {
                     j_ind = calc_coord(j, kj, order, height);
                     sum += img[j_ind * width + i_ind] * kernel[kj * order + ki];
-                    // // Set each coordinate if is out of bounds
-                    // if (i + ki - (order / 2) < 0) {
-                    //     i_ind = 0;
-                    // } else if (i + ki + (order / 2) > width) {
-                    //     i_ind = width - 1;
-                    // } else {
-                    //     i_ind = i + ki - (order / 2);
-                    // }
-
-                    // if (j + kj - (order / 2) < 0) {
-                    //     j_ind = 0;
-                    // } else if (j + kj + (order / 2) > height) {
-                    //     j_ind = height - 1;
-                    // } else {
-                    //     j_ind = j + kj - (order / 2);
-                    // }
-                    // sum += img[(j + kj - (order / 2)) * height + (i + ki - (order / 2))] * kernel[kj * order + ki];
                 }
             }
-            //printf("%.8f ", sum);
             outImg[j * width + i] = (int)sum;
         }
-
-        //printf("\n");
     }
-
 }
 
 float gaussian_func(int x, int y, float sigma) {
@@ -76,9 +62,7 @@ void create_kernel_matrix(float **kernel, int order, float sigma) {
     for (i = (int)(-order / 2); i <= (order / 2); i++) {
         for (j = (int)(-order / 2); j <= (order / 2); j++) {
             (*kernel)[(j + (order/2)) * order + (i + (order/2))] = gaussian_func(i, j, sigma);
-            printf("%.8f ", (*kernel)[j * order + i]);
         }
-        printf("\n");
     }    
 }
 
@@ -176,9 +160,6 @@ int main(int argc, char *argv[])
     read_pgm(inFilename, &width, &height, &max_gray, &img);
     outFilename = argv[2];
 	parse_float(argv[3], "sigma",  0, 10, &sigma);
-
-    // fprintf(stderr, "%s, %s, %f\n", inFilename, outFilename, sigma);
-    // fprintf(stderr, "%d x %d, %d\n", width, height, max_gray);
 
     /* Create Kernel Matrix */
     int order = (int)ceil(6.0 * sigma) % 2 == 1 ? ceil(6.0 * sigma) : ceil(6.0 * sigma) + 1; 
