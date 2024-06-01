@@ -18,7 +18,6 @@ int calc_coord(int ind, int k_ind, int order, int length) {
     } else if (ind + k_ind - (order / 2) >= length) {
         return length - 1;
     }
-    
     return ind + k_ind - (order / 2);
 }
 
