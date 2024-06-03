@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <limits.h>
 #include <math.h>
 
@@ -18,11 +19,85 @@ inline void _cuda_check(cudaError_t ret, const char *file, int line)
 	}
 }
 
+__device__ int calc_coord(int ind, int k_ind, int order, int length) {
+    if (ind + k_ind - (order / 2) < 0) {
+        return 0;
+    } else if (ind + k_ind - (order / 2) >= length) {
+        return length - 1;
+    }
+    return ind + k_ind - (order / 2);
+}
 
-void gaussian_blur_cuda(int *img_h, int *outImg_h, float* kernel_h, int width, int height, int order) {
+__global__ void gaussian_blur_kernel(int *img, int *outImg, int N, int order)
+{
+    int row = threadIdx.y;
+    int col = threadIdx.x;
 
+    calc_coord(row,  order, N)
+    
+    // x-axis of kernel
+    float sum = 0;
+    for (int ki = 0; ki < order; ki++) {
+        i_ind = calc_coord(col, ki, order, width);
+        // y-axis of kernel
+        for (int kj = 0; kj < order; kj++) {
+            j_ind = calc_coord(row, kj, order, height);
+            sum += img[j_ind * width + i_ind] * kernel[kj * order + ki];
+        }
+    }
+    outImg[col * width + row] = (int)sum;
+
+    // x-axis
+    // for (int i = 0; i < width; i++) {
+    //     // y-axis
+    //     for (int j = 0; j < height; j++) {
+    //         float sum = 0;
+    //         int i_ind, j_ind;
+
+    //         // iterate through kernel matrix and multiply weights
+    //         // x-axis of kernel
+    //         for (int ki = 0; ki < order; ki++) {
+    //             i_ind = calc_coord(i, ki, order, width);
+    //             // y-axis of kernel
+    //             for (int kj = 0; kj < order; kj++) {
+    //                 j_ind = calc_coord(j, kj, order, height);
+    //                 sum += img[j_ind * width + i_ind] * kernel[kj * order + ki];
+    //             }
+    //         }
+    //         outImg[j * width + i] = (int)sum;
+    //     }
+    // }
+
+}
+void gaussian_blur_cuda(int *img_h, int *outImg_h, float* kernel_h, int width, int height, int order)
+{
+
+    /* Memory Setup */
+    float *img_d, *outImg_d;
+    int size = height * width * sizeof(float);
+
+    cuda_check(cudaMalloc(&img_d, size));
+    cuda_check(cudaMalloc(&outImg_d, size));
+
+    cuda_check(cudaMemcpy(img_d, img_h, size, cudaMemcpyHostToDevice));
+    // cuda_check(cudaMemcpy(outImg_d, outImg_h, size, cudaMemcpyHostToDevice));
+
+
+
+    /* Invoke Kernel function */
     dim3 grid_dim(1);
-    dim3 block_dim(N, N);
+    dim3 block_dim(width, height);
+    gaussian_blur_kernel<<<grid_dim, block_dim>>>(img_d, outImg_d, N, order);
+
+    cuda_check(cudaPeekAtLastError());      /* Catch configuration errors */
+	cuda_check(cudaDeviceSynchronize());    /* Catch execution errors */
+
+    /* Copy outImg from device memory */
+	cuda_check(cudaMemcpy(outImg_h, outImg_d, size, cudaMemcpyDeviceToHost));
+
+    /* Free Device Memory */
+    cuda_check(cudaFree(img_d));
+    cuda_check(cudaFree(outImg_d));
 
 }
 /* 
@@ -30,6 +105,16 @@ void gaussian_blur_cuda(int *img_h, int *outImg_h, float* kernel_h, int width, i
 2. Invoke the kernel
 3. Retrieve results, memory cleanup
 */
+
+float gaussian_func(int x, int y, float sigma) {
+    /* FIX ME */
+    // might need to normalize it so the sum = 1.0
+    float exponent = -(x*x + y*y) / (2.0 * sigma * sigma);
+    float e = exp(exponent);
+
+    return (1.0 / (2.0 * M_PI * sigma * sigma)) * e;
+}
+
 void create_kernel_matrix(float **kernel, int order, float sigma) {
     *kernel = aligned_alloc(64, order * order * sizeof(float));
     int i, j;
