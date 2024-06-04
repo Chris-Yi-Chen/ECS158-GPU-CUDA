@@ -114,7 +114,7 @@ void read_pgm(const char *filename, int *width, int *height, int *max_gray, int 
         if (sscanf(line, "%d", max_gray) == 1) break;
     }
     
-    *img = aligned_alloc(64, (*width) * (*height) * sizeof(int));
+    *img = (int*)aligned_alloc(64, (*width) * (*height) * sizeof(int));
     if (!(*img)) {
         perror("img alloc failed");
         fclose(file);
@@ -176,7 +176,7 @@ int main(int argc, char *argv[])
 
 
     /* Call implementation */
-    int *outImg = aligned_alloc(64, width * height * sizeof(int));
+    int *outImg = (int*)aligned_alloc(64, width * height * sizeof(int));
     gaussian_blur(img, outImg, kernel, width, height, order); 
 
     /* Save output image */
