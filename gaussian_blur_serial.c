@@ -7,7 +7,7 @@
 #define MAX_LINE_LENGTH 1024
 #define M_PI 3.14159265358979323846
 
-//gcc -g -Wall -Wextra -Werror -O2 ./gaussian_blur_serial.c -o gaussian_blur_serial -lm
+// gcc -g -Wall -Wextra -Werror -O2 ./gaussian_blur_serial.c -o gaussian_blur_serial -lm
 //./gaussian_blur_serial city_256.pgm city_256_1.pgm 1
 //./ref_gaussian_blur_serial city_256.pgm city_256_ref.pgm 1
 //compare -fuzz 1% -metric AE ./city_256_1.pgm city_256_ref.pgm null:
@@ -18,6 +18,7 @@ int calc_coord(int ind, int k_ind, int order, int length) {
     } else if (ind + k_ind - (order / 2) >= length) {
         return length - 1;
     }
+    
     return ind + k_ind - (order / 2);
 }
 
@@ -40,9 +41,13 @@ void gaussian_blur(int *img, int *outImg, float* kernel, int width, int height, 
                     sum += img[j_ind * width + i_ind] * kernel[kj * order + ki];
                 }
             }
+            //printf("%.8f ", sum);
             outImg[j * width + i] = (int)sum;
         }
+
+        //printf("\n");
     }
+
 }
 
 float gaussian_func(int x, int y, float sigma) {
@@ -61,18 +66,20 @@ void create_kernel_matrix(float **kernel, int order, float sigma) {
     for (i = (int)(-order / 2); i <= (order / 2); i++) {
         for (j = (int)(-order / 2); j <= (order / 2); j++) {
             (*kernel)[(j + (order/2)) * order + (i + (order/2))] = gaussian_func(i, j, sigma);
+            // printf("%.8f ", (*kernel)[j * order + i]);
         }
+        // printf("\n");
     }    
 }
 
-void write_pgm(char *filename, int* map, size_t N, int max_gray) {
+void write_pgm(char *filename, int* map, size_t width, size_t height, int max_gray) {
     FILE* fp;
     size_t i;
     char* pixels;
 
-    pixels = malloc(N * N);
+    pixels = (char*)malloc(width * height);
 
-    for (i = 0; i < N * N; i++) {
+    for (i = 0; i < width * height; i++) {
         pixels[i] = map[i];
     }
 
@@ -82,8 +89,8 @@ void write_pgm(char *filename, int* map, size_t N, int max_gray) {
 		fprintf(stderr, "Error: cannot open file %s", filename);
 		exit(1);
 	}
-    fprintf(fp, "P5\n%ld %ld\n%d\n", N, N, max_gray);
-    fwrite(pixels, sizeof(char), N * N, fp);
+    fprintf(fp, "P5\n%ld %ld\n%d\n", width, height, max_gray);
+    fwrite(pixels, sizeof(char), width * height, fp);
 
     free(pixels);
     fclose(fp);
@@ -160,6 +167,9 @@ int main(int argc, char *argv[])
     outFilename = argv[2];
 	parse_float(argv[3], "sigma",  0, 10, &sigma);
 
+    // fprintf(stderr, "%s, %s, %f\n", inFilename, outFilename, sigma);
+    // fprintf(stderr, "%d x %d, %d\n", width, height, max_gray);
+
     /* Create Kernel Matrix */
     int order = (int)ceil(6.0 * sigma) % 2 == 1 ? ceil(6.0 * sigma) : ceil(6.0 * sigma) + 1; 
     create_kernel_matrix(&kernel, order, sigma);
@@ -170,7 +180,7 @@ int main(int argc, char *argv[])
     gaussian_blur(img, outImg, kernel, width, height, order); 
 
     /* Save output image */
-    write_pgm(outFilename, outImg, height, max_gray);
+    write_pgm(outFilename, outImg, width, height, max_gray);
 
     /* Free resources */
     free(img);
