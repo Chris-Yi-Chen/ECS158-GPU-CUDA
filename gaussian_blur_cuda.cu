@@ -29,14 +29,17 @@ __device__ int calc_coord(int ind, int k_ind, int order, int length) {
     return ind + k_ind - (order / 2);
 }
 
-__global__ void gaussian_blur_kernel(int *img, int *outImg, float* kernel, int N, int order)
+__global__ void gaussian_blur_kernel(int *img, int *outImg, float* kernel, int width, int height, int order)
 {
     // row = j, col = i
+    // top to bottom, # of rows
     int row = blockIdx.y * blockDim.y + threadIdx.y;
+
+    // left to right, # of col
     int col = blockIdx.x * blockDim.x + threadIdx.x;
 
     /* Discard out-of-bound coordinates */
-    if (row >= N || col >= N) {
+    if (row >= height || col >= width) {
 		return;
     }
 
@@ -45,40 +48,42 @@ __global__ void gaussian_blur_kernel(int *img, int *outImg, float* kernel, int N
     
     // x-axis of kernel
     for (int ki = 0; ki < order; ki++) {
-        i_ind = calc_coord(col, ki, order, N);
+        i_ind = calc_coord(col, ki, order, width);
         // y-axis of kernel
         for (int kj = 0; kj < order; kj++) {
-            j_ind = calc_coord(row, kj, order, N);
-            sum += img[j_ind * N + i_ind] * kernel[kj * order + ki];
+            j_ind = calc_coord(row, kj, order, height);
+            sum += img[j_ind * width + i_ind] * kernel[kj * order + ki];
         }
     }
-    outImg[row * N + col] = (int)sum;
+    outImg[row * width + col] = (int)sum;
 }
-void gaussian_blur_cuda(int *img_h, int *outImg_h, float* kernel_h, int width, int height, int order)
+void gaussian_blur(int *img_h, int *outImg_h, float* kernel_h, int width, int height, int order)
 {
-
+    // width = # of pixels left to right aka cols
+    // height = # of pixels up to down aka rows
     /* Memory Setup */
-    int *img_d, *outImg_d;
+    int *img_d;
+    int *outImg_d;
     float *kernel_d;
-    size_t size = height * width * sizeof(int);
+    size_t size = width * height * sizeof(int);
 
     cuda_check(cudaMalloc(&img_d, size));
     cuda_check(cudaMalloc(&outImg_d, size));
     cuda_check(cudaMalloc(&kernel_d, order * order * sizeof(float)));
 
     cuda_check(cudaMemcpy(img_d, img_h, size, cudaMemcpyHostToDevice));
-    cuda_check(cudaMemcpy(outImg_d, outImg_h, size, cudaMemcpyHostToDevice));
     cuda_check(cudaMemcpy(kernel_d, kernel_h, order * order * sizeof(float), cudaMemcpyHostToDevice));
 
+    // cuda_check(cudaMemcpy(outImg_d, outImg_h, size, cudaMemcpyHostToDevice));
 
 
     /* Invoke Kernel function */
-    int grid = ceil(width / 32.0);
-    // fprintf(stderr, "%d\n", grid);
+    int grid = (width + 31) / 32.0;
+    // fprintf(stderr, "%d, %d\n", width, height);
 
-    dim3 grid_dim(grid);
+    dim3 grid_dim(grid, grid);
     dim3 block_dim(32, 32);
-    gaussian_blur_kernel<<<grid_dim, block_dim>>>(img_d, outImg_d, kernel_h, width, order);
+    gaussian_blur_kernel<<<grid_dim, block_dim>>>(img_d, outImg_d, kernel_d, width, height, order);
 
     cuda_check(cudaPeekAtLastError());      /* Catch configuration errors */
 	cuda_check(cudaDeviceSynchronize());    /* Catch execution errors */
@@ -118,14 +123,14 @@ void create_kernel_matrix(float **kernel, int order, float sigma) {
     }    
 }
 
-void write_pgm(char *filename, int* map, size_t N, int max_gray) {
+void write_pgm(char *filename, int* map, size_t width, size_t height, int max_gray) {
     FILE* fp;
     size_t i;
     char* pixels;
 
-    pixels = (char*)malloc(N * N);
+    pixels = (char*)malloc(width * height);
 
-    for (i = 0; i < N * N; i++) {
+    for (i = 0; i < width * height; i++) {
         pixels[i] = map[i];
     }
 
@@ -135,8 +140,8 @@ void write_pgm(char *filename, int* map, size_t N, int max_gray) {
 		fprintf(stderr, "Error: cannot open file %s", filename);
 		exit(1);
 	}
-    fprintf(fp, "P5\n%ld %ld\n%d\n", N, N, max_gray);
-    fwrite(pixels, sizeof(char), N * N, fp);
+    fprintf(fp, "P5\n%ld %ld\n%d\n", width, height, max_gray);
+    fwrite(pixels, sizeof(char), width * height, fp);
 
     free(pixels);
     fclose(fp);
@@ -213,7 +218,8 @@ int main(int argc, char *argv[])
     outFilename = argv[2];
 	parse_float(argv[3], "sigma",  0, 10, &sigma);
 
-    fprintf(stderr, "%d, %d\n", width, height);
+    // fprintf(stderr, "%s, %s, %f\n", inFilename, outFilename, sigma);
+    // fprintf(stderr, "%d x %d, %d\n", width, height, max_gray);
 
     /* Create Kernel Matrix */
     int order = (int)ceil(6.0 * sigma) % 2 == 1 ? ceil(6.0 * sigma) : ceil(6.0 * sigma) + 1; 
@@ -221,11 +227,11 @@ int main(int argc, char *argv[])
 
 
     /* Call implementation */
-    int *outImg = (int *)aligned_alloc(64, width * height * sizeof(int));
-    gaussian_blur_cuda(img, outImg, kernel, width, height, order); 
+    int *outImg = (int*)aligned_alloc(64, width * height * sizeof(int));
+    gaussian_blur(img, outImg, kernel, width, height, order); 
 
     /* Save output image */
-    write_pgm(outFilename, outImg, height, max_gray);
+    write_pgm(outFilename, outImg, width, height, max_gray);
 
     /* Free resources */
     free(img);
